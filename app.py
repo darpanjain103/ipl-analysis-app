@@ -392,7 +392,7 @@ if fetch_data:
         st.markdown("---")
         st.subheader("🎯 IPL Bowling Analysis")
         bowling_tabs = st.tabs([
-            "Foot Type", "Bowling End", "Ball Type", "Shot", "Length", "Line", "Batting Hand", "Batter", "Length-Line"
+            "Foot Type", "Bowling End", "Ball Type", "Shot", "Length", "Line", "Batter", "Batting Hand", "Length-Line"
         ])
         btab1, btab2, btab3, btab4, btab5, btab6, btab7, btab8, btab9 = bowling_tabs
         with btab1:

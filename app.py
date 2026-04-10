@@ -1,0 +1,442 @@
+import streamlit as st
+import pandas as pd
+
+# Title
+st.title("IPL Batting & Bowling Analysis")
+
+# Load the dataset (relative path for Streamlit Cloud)
+df = pd.read_csv("Latest IPL 2026 Full Updated.csv")
+
+# Convert ballDateTime to datetime (to extract year easily)
+df["ballDateTime"] = pd.to_datetime(df["ballDateTime"], errors="coerce", dayfirst=True)
+df["Year"] = df["ballDateTime"].dt.year.astype("Int64")
+
+# Sidebar filters
+st.sidebar.header("Filters")
+batting_players = st.sidebar.multiselect("Select Batter(s)", df["battingPlayer"].dropna().unique())
+bowling_types = st.sidebar.multiselect("Select Bowling Type(s)", df["bowlingTypeId"].dropna().unique())
+bowlers = st.sidebar.multiselect("Select Bowler(s)", df["bowlerPlayer"].dropna().unique())
+max_over = int(df["overNumber"].max()) + 1
+over_range_ui = st.sidebar.slider(
+    "Over Range",
+    1,
+    max_over,
+    (1, 10)
+)
+over_range = (over_range_ui[0] - 1, over_range_ui[1] - 1)
+years = st.sidebar.multiselect("Select Year(s)", sorted(df["Year"].dropna().unique()))
+
+# ✅ Add Fetch button
+fetch_data = st.sidebar.button("Fetch")
+
+# ---------- ✅ Corrected Length-Line Table (lengths now show on Y-axis properly) ----------
+def make_length_line_table(df):
+    temp_df = df[df["isWide"] != True].copy()
+    if "dismissalPlayer" in temp_df.columns:
+        outs_df = temp_df.groupby(["lengthTypeId", "lineTypeId"]).apply(
+            lambda x: x[(x["isWicket"] == True) &
+                        (x["dismissalPlayer"].notna()) &
+                        (x["dismissalPlayer"] == x["battingPlayer"])].shape[0]
+        ).reset_index(name="Outs")
+    else:
+        outs_df = temp_df.groupby(["lengthTypeId", "lineTypeId"]).agg(Outs=("isWicket", "sum")).reset_index()
+                        
+            
+
+    group = temp_df.groupby(["lengthTypeId", "lineTypeId"]).agg(
+        Total_Runs=("runsScored", "sum"),
+        Balls_Faced=("runsScored", "count"),
+    ).reset_index()
+    group = pd.merge(group, outs_df, on=["lengthTypeId", "lineTypeId"], how="left")
+
+    group["Strike Rate"] = round((group["Total_Runs"] / group["Balls_Faced"]) * 100, 2)
+    group["Average"] = group.apply(lambda x: round(x["Total_Runs"]/x["Outs"], 2) if x["Outs"] > 0 else "-", axis=1)
+    group["SR / Avg"] = (group["Strike Rate"].astype(str) + " / " + group["Average"].astype(str) + " ("+ group["Balls_Faced"].fillna(0).astype(int).astype(str)+ ")")
+
+    # Map readable names
+    if "lengthTypeName" in df.columns:
+        length_map = df.drop_duplicates("lengthTypeId").set_index("lengthTypeId")["lengthTypeName"].to_dict()
+        group["lengthName"] = group["lengthTypeId"].map(length_map).fillna(group["lengthTypeId"])
+    else:
+        group["lengthName"] = group["lengthTypeId"]
+
+    if "lineTypeName" in df.columns:
+        line_map = df.drop_duplicates("lineTypeId").set_index("lineTypeId")["lineTypeName"].to_dict()
+        group["lineName"] = group["lineTypeId"].map(line_map).fillna(group["lineTypeId"])
+    else:
+        group["lineName"] = group["lineTypeId"]
+
+    # Pivot table with readable Y-axis (Length)
+    pivot_table = group.pivot(index="lengthName", columns="lineName", values="SR / Avg").fillna("-")
+
+    # Add total column
+    total_col = []
+    for length in pivot_table.index:
+        temp = group[group["lengthName"] == length]
+        runs = temp["Total_Runs"].sum()
+        balls = temp["Balls_Faced"].sum()
+        outs = temp["Outs"].sum()
+        sr = round(runs / balls * 100, 2) if balls > 0 else 0
+        avg = round(runs / outs, 2) if outs > 0 else "-"
+        total_col.append(f"{sr} / {avg} ({int(balls)})")
+    pivot_table["Total"] = total_col
+
+    # Add total row
+    total_row = []
+    for line in pivot_table.columns:
+        if line == "Total":
+            runs = group["Total_Runs"].sum()
+            balls = group["Balls_Faced"].sum()
+            outs = group["Outs"].sum()
+        else:
+            temp = group[group["lineName"] == line]
+            runs = temp["Total_Runs"].sum()
+            balls = temp["Balls_Faced"].sum()
+            outs = temp["Outs"].sum()
+        sr = round(runs / balls * 100, 2) if balls > 0 else 0
+        avg = round(runs / outs, 2) if outs > 0 else "-"
+        total_row.append(f"{sr} / {avg} ({int(balls)})")
+    pivot_table.loc["Total"] = total_row
+
+    pivot_table.index.name = "Length"
+    return pivot_table
+
+# Apply filters only when Fetch is clicked
+if fetch_data:
+    # ---------- Batting filtered dataset ----------
+    filtered_df = df.copy()
+    if batting_players:
+        filtered_df = filtered_df[filtered_df["battingPlayer"].isin(batting_players)]
+    outs_base_df = df[df["dismissalPlayer"].isin(batting_players)]
+    if bowlers:
+        outs_base_df = outs_base_df[outs_base_df["bowlerPlayer"].isin(bowlers)]
+    if bowling_types:
+        outs_base_df = outs_base_df[outs_base_df["bowlingTypeId"].isin(bowling_types)]
+    if years:
+        outs_base_df = outs_base_df[outs_base_df["Year"].isin(years)]
+    outs_base_df = outs_base_df[(outs_base_df["overNumber"] >= over_range[0]) & (outs_base_df["overNumber"] <= over_range[1])]
+    if bowling_types:
+        filtered_df = filtered_df[filtered_df["bowlingTypeId"].isin(bowling_types)]
+    if bowlers:
+        filtered_df = filtered_df[filtered_df["bowlerPlayer"].isin(bowlers)]
+    if years:
+        filtered_df = filtered_df[filtered_df["Year"].isin(years)]
+    filtered_df = filtered_df[
+        (filtered_df["overNumber"] >= over_range[0]) & (filtered_df["overNumber"] <= over_range[1])
+    ]
+
+    # ---------- Bowling filtered dataset ----------
+    bowling_filtered_df = df.copy()
+    if years:
+        bowling_filtered_df = bowling_filtered_df[bowling_filtered_df["Year"].isin(years)]
+    bowling_filtered_df = bowling_filtered_df[
+        (bowling_filtered_df["overNumber"] >= over_range[0]) & (bowling_filtered_df["overNumber"] <= over_range[1])
+    ]
+    if bowlers:
+        bowling_filtered_df = bowling_filtered_df[bowling_filtered_df["bowlerPlayer"].isin(bowlers)]
+
+    # ---------- Batting helper ----------
+    def make_group_table(df, group_by_col, display_name=None):
+        temp_df = df.copy()
+        runs_balls_df = temp_df[temp_df["isWide"] != True]
+
+        if "dismissalPlayer" in temp_df.columns:
+            outs_df = temp_df.groupby(group_by_col).apply(
+                lambda x: x[(x["isWicket"] == True) & (x["dismissalPlayer"].notna()) & (x["dismissalPlayer"] == x["battingPlayer"])].shape[0]
+            ).reset_index(name="Outs")
+        else:
+            outs_df = temp_df.groupby(group_by_col).agg(Outs=("isWicket", "sum")).reset_index()
+
+        runs_balls = runs_balls_df.groupby(group_by_col).agg(
+            Total_Runs=("runsScored", "sum"),
+            Balls_Faced=("runsScored", "count"),
+            Fours=("runsScored", lambda x: (x == 4).sum()),
+            Sixes=("runsScored", lambda x: (x == 6).sum()),
+            Dot_Balls=("runsScored", lambda x: (x == 0).sum()),
+            Control=("battingConnectionId", lambda x: x.fillna('None').isin(['Left','Middled','WellTimed','None']).sum())
+        ).reset_index()
+        group = pd.merge(runs_balls, outs_df, on=group_by_col, how="left")
+
+        group["Strike Rate"] = round((group["Total_Runs"] / group["Balls_Faced"]) * 100, 2)
+        group["Boundary %"] = round(((group["Fours"] + group["Sixes"]) / group["Balls_Faced"]) * 100, 2)
+        group["Dot Ball %"] = round((group["Dot_Balls"] / group["Balls_Faced"]) * 100, 2)
+        group["Control %"] = round((group["Control"] / group["Balls_Faced"]) * 100, 2)
+        group["False Shot"] = group["Balls_Faced"] - group["Control"]
+        group["False Shot %"] = round((group["False Shot"] / group["Balls_Faced"]) * 100, 2)
+        group["Average"] = group.apply(lambda x: round(x["Total_Runs"]/x["Outs"], 2) if x["Outs"] > 0 else "-", axis=1)
+        group = group.sort_values(by="Strike Rate", ascending=False).reset_index(drop=True)
+        total_outs = outs_base_df.shape[0]
+
+        total_row = pd.DataFrame({
+            group_by_col: ["Total"],
+            "Total_Runs": [group["Total_Runs"].sum()],
+            "Balls_Faced": [group["Balls_Faced"].sum()],
+            "Fours": [group["Fours"].sum()],
+            "Sixes": [group["Sixes"].sum()],
+            "Dot_Balls": [group["Dot_Balls"].sum()],
+            "Outs": [total_outs],
+            "Control": [group["Control"].sum()],
+            "Strike Rate": [round(group["Total_Runs"].sum() / group["Balls_Faced"].sum() * 100, 2)],
+            "Boundary %": [round((group["Fours"].sum() + group["Sixes"].sum()) / group["Balls_Faced"].sum() * 100, 2)],
+            "Dot Ball %": [round(group["Dot_Balls"].sum() / group["Balls_Faced"].sum() * 100, 2)],
+            "Control %": [round(group["Control"].sum() / group["Balls_Faced"].sum() * 100, 2)],
+            "False Shot": [group["False Shot"].sum()],
+            "False Shot %": [round((group["False Shot"].sum() / group["Balls_Faced"].sum()) * 100, 2)],
+            "Average": ["-" if total_outs == 0 else round(group["Total_Runs"].sum() / total_outs, 2)]
+        })
+
+        group = pd.concat([group, total_row], ignore_index=True)
+        group.rename(columns={"Total_Runs": "Runs", "Balls_Faced": "Balls", "Dot_Balls": "Dot Balls"}, inplace=True)
+        metric_order = [
+            "Runs", "Balls", "Outs", "Average", "Strike Rate", "Fours", "Sixes",
+            "Dot Ball %", "Boundary %", "Control %", "False Shot %"
+        ]
+        group = group[[group_by_col] + metric_order]
+
+        if display_name:
+            group.rename(columns={group_by_col: display_name}, inplace=True)
+
+        return group
+
+    # ---------- Bowling helper ----------
+    def make_bowling_group_table_with_total(df, group_by_col, display_name=None):
+        if df.empty:
+            return pd.DataFrame(columns=[display_name or group_by_col, "Runs", "Extras", "Balls", "Wickets", "Dot", "Dot %", "Fours", "Sixes", "Boundaries", "Boundary %", "False Shot", "False Shot %", "Average", "Economy"])
+        temp = df.copy()
+        temp_non_wide = temp[(temp["isWide"] != True) & (temp["isNoBall"] != True)]
+        def count_valid_wickets(x):
+            return ((x["isWicket"] == True) & (~x["dismissalTypeId"].isin(["RunOut", "RunOutSub"]))).sum()
+        group = temp.groupby(group_by_col).apply(count_valid_wickets).reset_index(name="Wickets")
+        control_group = temp_non_wide.groupby(group_by_col).agg(
+            Control=("battingConnectionId", lambda x: x.fillna('None').isin(['Left', 'Middled', 'WellTimed', 'None']).sum())
+        ).reset_index()
+        if group_by_col == "battingPlayer":
+            runs_agg = temp.groupby(group_by_col).agg(
+                Runs=("runsScored", "sum"),
+                Extras=("extras", "sum"),
+                Dot=("runsConceded", lambda x: (x == 0).sum()),
+                Fours=("runsScored", lambda x: (x == 4).sum()),
+                Sixes=("runsScored", lambda x: (x == 6).sum())
+            ).reset_index()
+        else:
+            runs_agg = temp.groupby(group_by_col).agg(
+                Runs=("runsConceded", "sum"),
+                Extras=("extras", "sum"),
+                Dot=("runsConceded", lambda x: (x == 0).sum()),
+                Fours=("runsConceded", lambda x: (x == 4).sum()),
+                Sixes=("runsConceded", lambda x: (x == 6).sum())
+            ).reset_index()
+        group = pd.merge(group, runs_agg, on=group_by_col, how="left")
+        balls_group = temp_non_wide.groupby(group_by_col).agg(Balls=("ballNumber", "count")).reset_index()
+        group = pd.merge(group, balls_group, on=group_by_col, how="left")
+        group = pd.merge(group, control_group, on=group_by_col, how="left")
+        group["Boundaries"] = group["Fours"] + group["Sixes"]
+        group["Boundary %"] = round((group["Boundaries"] / group["Balls"]) * 100, 2)
+        group["False Shot"] = group["Balls"] - group["Control"]
+        group["False Shot %"] = round((group["False Shot"] / group["Balls"]) * 100, 2)
+        group["Dot %"] = round((group["Dot"] / group["Balls"]) * 100, 2)
+        group["Average"] = group.apply(lambda x: round(x["Runs"]/x["Wickets"], 2) if x["Wickets"] > 0 else "-", axis=1)
+        group["Economy"] = group.apply(lambda x: round((x["Runs"] / x["Balls"]) * 6, 2) if x["Balls"] > 0 else "-", axis=1)
+        total_row = pd.DataFrame({
+            group_by_col: ["Total"],
+            "Runs": [group["Runs"].sum()],
+            "Extras": [group["Extras"].sum()],
+            "Balls": [group["Balls"].sum()],
+            "Wickets": [group["Wickets"].sum()],
+            "Dot": [group["Dot"].sum()],
+            "Dot %": [round((group["Dot"].sum() / group["Balls"].sum()) * 100, 2) if group["Balls"].sum() > 0 else 0],
+            "Fours": [group["Fours"].sum()],
+            "Sixes": [group["Sixes"].sum()],
+            "Boundaries": [group["Boundaries"].sum()],
+            "Boundary %": [round((group["Boundaries"].sum() / group["Balls"].sum()) * 100, 2) if group["Balls"].sum() > 0 else 0],
+            "False Shot": [group["False Shot"].sum()],
+            "False Shot %": [round((group["False Shot"].sum() / group["Balls"].sum()) * 100, 2)],
+            "Average": ["-" if group["Wickets"].sum() == 0 else round(group["Runs"].sum() / group["Wickets"].sum(), 2)],
+            "Economy": [round((group["Runs"].sum() / group["Balls"].sum()) * 6, 2) if group["Balls"].sum() > 0 else "-"]
+        })
+        group = pd.concat([group, total_row], ignore_index=True)
+        group = group[[group_by_col, "Runs", "Balls", "Wickets", "Average", "Economy", "Dot %", "Boundary %", "False Shot %"]]
+        if display_name:
+            group.rename(columns={group_by_col: display_name}, inplace=True)
+        return group
+
+    def make_bowling_length_line_table(df):
+        temp = df.copy()
+        temp_valid = temp[(temp["isWide"] != True) & (temp["isNoBall"] != True)]
+        
+        wickets_df = temp.groupby(["lengthTypeId", "lineTypeId"]).apply(
+            lambda x: ((x["isWicket"] == True) &
+                   (~x["dismissalTypeId"].isin(["RunOut", "RunOutSub"]))).sum()
+    ).reset_index(name="Wickets")
+
+        runs_df = temp.groupby(["lengthTypeId", "lineTypeId"]).agg(
+            Runs=("runsConceded", "sum")
+        ).reset_index()
+        
+        balls_df = temp_valid.groupby(["lengthTypeId", "lineTypeId"]).size().reset_index(name="Balls")
+        group = runs_df.merge(balls_df, on=["lengthTypeId", "lineTypeId"], how="left")
+        group = group.merge(wickets_df, on=["lengthTypeId", "lineTypeId"], how="left")
+        
+        group["Economy"] = round((group["Runs"] / group["Balls"]) * 6, 2)
+        group["Average"] = group.apply(
+            lambda x: round(x["Runs"] / x["Wickets"], 2) if x["Wickets"] > 0 else "-",
+        axis=1
+        )
+
+        group["Avg / Eco"] = (group["Average"].astype(str) + " / " + group["Economy"].astype(str) + " ("+ group["Balls"].fillna(0).astype(int).astype(str) + ")")
+
+    # Map names
+        if "lengthTypeName" in df.columns:
+            group["lengthName"] = group["lengthTypeId"].map(
+                df.drop_duplicates("lengthTypeId").set_index("lengthTypeId")["lengthTypeName"]
+            )
+        else:
+            group["lengthName"] = group["lengthTypeId"]
+
+        if "lineTypeName" in df.columns:
+            group["lineName"] = group["lineTypeId"].map(
+                df.drop_duplicates("lineTypeId").set_index("lineTypeId")["lineTypeName"]
+            )
+        else:
+            group["lineName"] = group["lineTypeId"]
+
+        pivot = group.pivot(index="lengthName", columns="lineName", values="Avg / Eco").fillna("-")
+        total_col = []
+        for length in pivot.index:
+            temp_l = group[group["lengthName"] == length]
+            runs = temp_l["Runs"].sum()
+            balls = temp_l["Balls"].sum()
+            wickets = temp_l["Wickets"].sum()
+            eco = round((runs / balls) * 6, 2) if balls > 0 else "-"
+            avg = round(runs / wickets, 2) if wickets > 0 else "-"
+            total_col.append(f"{avg} / {eco} ({int(balls)})")
+        pivot["Total"] = total_col
+        
+        total_row = []
+        for line in pivot.columns:
+            if line == "Total":
+                runs = group["Runs"].sum()
+                balls = group["Balls"].sum()
+                wickets = group["Wickets"].sum()
+            else:
+                temp_l = group[group["lineName"] == line]
+                runs = temp_l["Runs"].sum()
+                balls = temp_l["Balls"].sum()
+                wickets = temp_l["Wickets"].sum()
+            eco = round((runs / balls) * 6, 2) if balls > 0 else "-"
+            avg = round(runs / wickets, 2) if wickets > 0 else "-"
+            total_row.append(f"{avg} / {eco} ({int(balls)})")
+        pivot.loc["Total"] = total_row
+        pivot.index.name = "Length"
+        
+        return pivot
+        
+
+    # ---------- Display helper ----------
+    def show_table(df, key):
+        df_display = df.copy()
+        if df_display.shape[1] > 0:
+            first_col = df_display.columns[0]
+            try:
+                df_display = df_display.set_index(first_col)
+            except Exception:
+                df_display[first_col] = df_display[first_col].astype(str)
+                df_display = df_display.set_index(first_col)
+        row_height = 33
+        header_height = 38
+        num_rows = len(df_display)
+        dynamic_height = int(header_height + (num_rows * row_height))
+        st.dataframe(df_display, use_container_width=True, height=dynamic_height)
+
+    # ---------- Batting Section ----------
+    st.subheader("🏏 IPL Batting Analysis")
+    if batting_players:
+        tabs = st.tabs([
+            "Foot Type", "Length", "Line", "Ball Type", "Bowling End", "Bowling Type",
+            "Bowler", "Shot", "Bowling Hand", "Shot Area", "Length-Line"
+        ])
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = tabs
+
+        with tab1:
+            show_table(make_group_table(filtered_df, "battingFeetId", display_name="Foot Type"), "foot_type")
+        with tab2:
+            show_table(make_group_table(filtered_df, "lengthTypeId", display_name="Length"), "length")
+        with tab3:
+            show_table(make_group_table(filtered_df, "lineTypeId", display_name="Line"), "line")
+        with tab4:
+            show_table(make_group_table(filtered_df, "bowlingDetailId", display_name="Ball Type"), "ball_type")
+        with tab5:
+            show_table(make_group_table(filtered_df, "bowlingFromId", display_name="Bowling End"), "bowling_end")
+        with tab6:
+            show_table(make_group_table(filtered_df, "bowlingTypeId", display_name="Bowling Type"), "bowling_type")
+        with tab7:
+            show_table(make_group_table(filtered_df, "bowlerPlayer", display_name="Bowler"), "bowler")
+        with tab8:
+            show_table(make_group_table(filtered_df, "battingShotTypeId", display_name="Shot"), "shot")
+        with tab9:
+            show_table(make_group_table(filtered_df, "bowlingHandId", display_name="Bowling Hand"), "bowling_hand")
+        with tab10:
+            show_table(make_group_table(filtered_df, "fieldingPosition", display_name="Shot Area"), "shot_area")
+        with tab11:
+            st.markdown("**Strike Rate/Average (Balls):**")
+            length_line_df = make_length_line_table(filtered_df)
+            length_line_df.reset_index(inplace=True)
+            show_table(length_line_df, "length_line")
+            pass
+    else:
+        st.info("Select Batter(s) in the Filters to view batting analysis.")
+
+    # ---------- Bowling Section ----------
+    # Show bowling only if bowling is selected AND batting_players is NOT selected
+    if bowlers and not batting_players:
+        st.markdown("---")
+        st.subheader("🎯 IPL Bowling Analysis")
+        bowling_tabs = st.tabs([
+            "Foot Type", "Bowling End", "Ball Type", "Shot", "Length", "Line", "Batter", "Length-Line"
+        ])
+        btab1, btab2, btab3, btab4, btab5, btab6, btab7, btab8 = bowling_tabs
+        with btab1:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "battingFeetId", display_name="Foot Type"),
+                "b_foot"
+            )
+        with btab2:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "bowlingFromId", display_name="Bowling End"),
+                "b_end"
+            )
+        with btab3:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "bowlingDetailId", display_name="Ball Type"),
+                "b_ball_type"
+            )
+        with btab4:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "battingShotTypeId", display_name="Shot"),
+                "b_shot"
+            )
+        with btab5:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "lengthTypeId", display_name="Length"),
+                "b_length"
+            )
+        with btab6:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "lineTypeId", display_name="Line"),
+                "b_line"
+            )
+        with btab7:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "battingPlayer", display_name="Batter"),
+                "b_batter"
+            )
+        with btab8:
+            st.markdown("**Average / Economy (Balls):**")
+            ll_bowl_df = make_bowling_length_line_table(bowling_filtered_df)
+            ll_bowl_df.reset_index(inplace=True)
+            show_table(ll_bowl_df, "b_length_line")
+    elif not batting_players:
+        st.info("Select Bowler(s) in the Filters to view bowling analysis.")
+
+else:
+    st.info("👈 Adjust filters and click Fetch to view results.")

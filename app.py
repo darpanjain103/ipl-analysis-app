@@ -5,7 +5,7 @@ import pandas as pd
 st.title("IPL Batting & Bowling Analysis")
 
 # Load the dataset (relative path for Streamlit Cloud)
-df = pd.read_csv("Latest IPL 2026 Full Updated.csv")
+df = pd.read_csv("Full IPL 2023-2026.csv")
 
 # Convert ballDateTime to datetime (to extract year easily)
 df["ballDateTime"] = pd.to_datetime(df["ballDateTime"], errors="coerce", dayfirst=True)

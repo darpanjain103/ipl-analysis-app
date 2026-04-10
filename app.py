@@ -392,9 +392,9 @@ if fetch_data:
         st.markdown("---")
         st.subheader("🎯 IPL Bowling Analysis")
         bowling_tabs = st.tabs([
-            "Foot Type", "Bowling End", "Ball Type", "Shot", "Length", "Line", "Batter", "Length-Line"
+            "Foot Type", "Bowling End", "Ball Type", "Shot", "Length", "Line", "Batting Hand", "Batter", "Length-Line"
         ])
-        btab1, btab2, btab3, btab4, btab5, btab6, btab7, btab8 = bowling_tabs
+        btab1, btab2, btab3, btab4, btab5, btab6, btab7, btab8, btab9 = bowling_tabs
         with btab1:
             show_table(
                 make_bowling_group_table_with_total(bowling_filtered_df, "battingFeetId", display_name="Foot Type"),
@@ -431,6 +431,11 @@ if fetch_data:
                 "b_batter"
             )
         with btab8:
+            show_table(
+                make_bowling_group_table_with_total(bowling_filtered_df, "battingPlayerHand", display_name="Batting Hand"),
+                "b_batting_hand"
+            )
+        with btab9:
             st.markdown("**Average / Economy (Balls):**")
             ll_bowl_df = make_bowling_length_line_table(bowling_filtered_df)
             ll_bowl_df.reset_index(inplace=True)

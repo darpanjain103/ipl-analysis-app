@@ -153,7 +153,7 @@ if fetch_data:
             Fours=("runsScored", lambda x: (x == 4).sum()),
             Sixes=("runsScored", lambda x: (x == 6).sum()),
             Dot_Balls=("runsScored", lambda x: (x == 0).sum()),
-            Control=("battingConnectionId", lambda x: x.fillna('None').isin(['Left','Middled','WellTimed','None']).sum())
+            Control=("battingConnectionId", lambda x: x.fillna('None').isin(['Left','Middled','WellTimed','None', 'Played']).sum())
         ).reset_index()
         group = pd.merge(runs_balls, outs_df, on=group_by_col, how="left")
 
@@ -208,7 +208,7 @@ if fetch_data:
             return ((x["isWicket"] == True) & (~x["dismissalTypeId"].isin(["RunOut", "RunOutSub"]))).sum()
         group = temp.groupby(group_by_col).apply(count_valid_wickets).reset_index(name="Wickets")
         control_group = temp_non_wide.groupby(group_by_col).agg(
-            Control=("battingConnectionId", lambda x: x.fillna('None').isin(['Left', 'Middled', 'WellTimed', 'None']).sum())
+            Control=("battingConnectionId", lambda x: x.fillna('None').isin(['Left', 'Middled', 'WellTimed', 'None', 'Played']).sum())
         ).reset_index()
         if group_by_col == "battingPlayer":
             runs_agg = temp.groupby(group_by_col).agg(

@@ -8,7 +8,7 @@ st.title("IPL Batting & Bowling Analysis")
 df = pd.read_csv("Full IPL 2023-2026.csv")
 
 # Convert ballDateTime to datetime (to extract year easily)
-df["ballDateTime"] = pd.to_datetime(df["ballDateTime"], errors="coerce", dayfirst=True)
+df["ballDateTime"] = pd.to_datetime(df["ballDateTime"], errors="coerce", format="mixed", dayfirst=True)
 df["Year"] = df["ballDateTime"].dt.year.astype("Int64")
 
 # Sidebar filters

@@ -157,6 +157,8 @@ if fetch_data:
         ).reset_index()
         group = pd.merge(runs_balls, outs_df, on=group_by_col, how="left")
 
+        group["Control"] = pd.to_numeric(group["Control"], errors="coerce").fillna(0).astype(int)
+        group["Balls_Faced"] = pd.to_numeric(group["Balls_Faced"], errors="coerce").fillna(0).astype(int)
         group["Strike Rate"] = round((group["Total_Runs"] / group["Balls_Faced"]) * 100, 2)
         group["Boundary %"] = round(((group["Fours"] + group["Sixes"]) / group["Balls_Faced"]) * 100, 2)
         group["Dot Ball %"] = round((group["Dot_Balls"] / group["Balls_Faced"]) * 100, 2)

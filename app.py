@@ -378,8 +378,7 @@ if fetch_data:
         with tab9:
             show_table(make_group_table(filtered_df, "bowlingHandId", display_name="Bowling Hand"), "bowling_hand")
         with tab10:
-            shot_area_df = filtered_df[filtered_df["fieldingPosition"].fillna("").str.strip() != ""]
-            show_table(make_group_table(shot_area_df, "fieldingPosition", display_name="Shot Area"), "shot_area")
+            show_table(make_group_table(filtered_df, "fieldingPosition", display_name="Shot Area"), "shot_area")
         with tab11:
             st.markdown("**Strike Rate/Average (Balls):**")
             length_line_df = make_length_line_table(filtered_df)

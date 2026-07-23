@@ -10,6 +10,19 @@ df = pd.read_csv("Full IPL 2023-2026.csv")
 # Convert ballDateTime to datetime (to extract year easily)
 df["ballDateTime"] = pd.to_datetime(df["ballDateTime"], errors="coerce", format="mixed", dayfirst=True)
 df["Year"] = df["ballDateTime"].dt.year.astype("Int64")
+# ---- Last updated caption (separate, correctly-parsed calculation) ----
+def get_last_updated_date(raw_series):
+    iso_parsed = pd.to_datetime(raw_series, format="%Y-%m-%d", errors="coerce")
+    remaining = raw_series[iso_parsed.isna()]
+    dmy_parsed = pd.to_datetime(remaining, format="%d-%m-%Y", errors="coerce")
+    iso_parsed.loc[dmy_parsed.index] = dmy_parsed
+    return iso_parsed.max()
+last_updated = get_last_updated_date(pd.read_csv("Full IPL 2023-2026.csv", usecols=["ballDateTime"], dtype=str)["ballDateTime"])
+if pd.notna(last_updated):
+    st.markdown(
+        f"<p style='color:gray; font-size:0.9rem; margin-bottom: 15px;'>📅 <b>Last updated: {last_updated.strftime('%d %B %Y')}</b></p>",
+        unsafe_allow_html=True
+    )
 
 # Sidebar filters
 st.sidebar.header("Filters")

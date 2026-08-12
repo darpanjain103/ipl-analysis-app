@@ -155,7 +155,7 @@ if fetch_data:
 
         if "dismissalPlayer" in temp_df.columns:
             outs_df = temp_df.groupby(group_by_col).apply(
-                lambda x: x[(x["isWicket"] == True) & (x["dismissalPlayer"].notna()) & (x["dismissalPlayer"] == x["battingPlayer"])].shape[0]
+                lambda x: x[(x["isWicket"] == True) & (x["dismissalPlayer"].notna()) & (x["dismissalPlayer"] == x["battingPlayer"]) & (~x["dismissalTypeId"].isin(["RunOut", "RunOutSub"]))].shape[0]
             ).reset_index(name="Outs")
         else:
             outs_df = temp_df.groupby(group_by_col).agg(Outs=("isWicket", "sum")).reset_index()

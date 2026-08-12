@@ -49,18 +49,22 @@ def make_length_line_table(df):
         outs_df = temp_df.groupby(["lengthTypeId", "lineTypeId"]).apply(
             lambda x: x[(x["isWicket"] == True) &
                         (x["dismissalPlayer"].notna()) &
-                        (x["dismissalPlayer"] == x["battingPlayer"])].shape[0]
-        ).reset_index(name="Outs")
+                        (x["dismissalPlayer"] == x["battingPlayer"]) &
+                        (~x["dismissalTypeId"].isin(["RunOut", "RunOutSub"]))].shape[0]).reset_index(name="Outs")
+        outs_total_df = temp_df.groupby(["lengthTypeId", "lineTypeId"]).apply(
+            lambda x: x[(x["isWicket"] == True) &
+                        (x["dismissalPlayer"].notna()) &
+                        (x["dismissalPlayer"] == x["battingPlayer"])].shape[0]).reset_index(name="OutsTotal")
     else:
         outs_df = temp_df.groupby(["lengthTypeId", "lineTypeId"]).agg(Outs=("isWicket", "sum")).reset_index()
-                        
-            
+        outs_total_df = outs_df.rename(columns={"Outs": "OutsTotal"})
 
     group = temp_df.groupby(["lengthTypeId", "lineTypeId"]).agg(
         Total_Runs=("runsScored", "sum"),
         Balls_Faced=("runsScored", "count"),
     ).reset_index()
     group = pd.merge(group, outs_df, on=["lengthTypeId", "lineTypeId"], how="left")
+    group = pd.merge(group, outs_total_df, on=["lengthTypeId", "lineTypeId"], how="left")
 
     group["Strike Rate"] = round((group["Total_Runs"] / group["Balls_Faced"]) * 100, 2)
     group["Average"] = group.apply(lambda x: round(x["Total_Runs"]/x["Outs"], 2) if x["Outs"] > 0 else "-", axis=1)
@@ -100,7 +104,7 @@ def make_length_line_table(df):
         if line == "Total":
             runs = group["Total_Runs"].sum()
             balls = group["Balls_Faced"].sum()
-            outs = group["Outs"].sum()
+            outs = group["OutsTotal"].sum()
         else:
             temp = group[group["lineName"] == line]
             runs = temp["Total_Runs"].sum()

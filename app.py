@@ -8,7 +8,15 @@ st.title("IPL Batting & Bowling Analysis")
 df = pd.read_csv("Full IPL 2023-2026.csv")
 
 # Convert ballDateTime to datetime (to extract year easily)
-df["ballDateTime"] = pd.to_datetime(df["ballDateTime"], errors="coerce", format="mixed", dayfirst=True)
+# NEW — handles both ISO (YYYY-MM-DD) and DD-MM-YYYY in the same column
+def parse_mixed_dates(raw_series):
+    iso_parsed = pd.to_datetime(raw_series, format="%Y-%m-%d", errors="coerce")
+    remaining_mask = iso_parsed.isna()
+    dmy_parsed = pd.to_datetime(raw_series[remaining_mask], format="%d-%m-%Y", errors="coerce")
+    iso_parsed.loc[remaining_mask] = dmy_parsed
+    return iso_parsed
+
+df["ballDateTime"] = parse_mixed_dates(df["ballDateTime"].astype(str))
 df["Year"] = df["ballDateTime"].dt.year.astype("Int64")
 # ---- Last updated caption (separate, correctly-parsed calculation) ----
 def get_last_updated_date(raw_series):

@@ -424,7 +424,7 @@ if fetch_data:
     # Show bowling only if bowling is selected AND batting_players is NOT selected
     if bowlers and not batting_players:
         st.markdown("---")
-        st.subheader("🎯 IPL Bowling Analysis")
+        st.subheader("⚪ IPL Bowling Analysis")
         bowling_tabs = st.tabs([
             "Foot Type", "Bowling End", "Ball Type", "Shot", "Length", "Line", "Batter", "Batting Hand", "Length-Line"
         ])

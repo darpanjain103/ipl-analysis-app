@@ -26,6 +26,12 @@ def get_last_updated_date(raw_series):
     iso_parsed.loc[dmy_parsed.index] = dmy_parsed
     return iso_parsed.max()
 last_updated = get_last_updated_date(pd.read_csv("Full IPL 2023-2026.csv", usecols=["ballDateTime"], dtype=str)["ballDateTime"])
+
+st.markdown(
+    "<p style='color:gray; font-size:0.9rem; margin-bottom: 15px;'>📊 <b>Data from 2023 onwards</b></p>",
+    unsafe_allow_html=True
+)
+
 if pd.notna(last_updated):
     st.markdown(
         f"<p style='color:gray; font-size:0.9rem; margin-bottom: 15px;'>📅 <b>Last updated: {last_updated.strftime('%d %B %Y')}</b></p>",
